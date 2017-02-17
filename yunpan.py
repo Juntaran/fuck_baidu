@@ -1,16 +1,19 @@
+import os
+import json
 import base64
-import requests
 import base
 import re
 import rsa
+import requests
 
 
 class YunPan:
-    def __init__(self, user_name: str, password: str):
+    def __init__(self, user_name: str, password: str, cookie_path: str = "cookie_file"):
         self.session = requests.session()
         self.gid = base.build_gid()
         self.user_name = user_name
         self.password = password
+        self.cookie_path = cookie_path
 
     def login(self):
         # 1.获取cookies:BAIDUID
@@ -128,3 +131,30 @@ class YunPan:
         headers["Host"] = "passport.baidu.com"
         url = "https://passport.baidu.com/v2/api/?login"
         self.session.post(url, data=data, headers=headers)
+
+    def save(self):
+        with open(self.cookie_path, 'w') as f:
+            cookies = self.session.cookies.get_dict()
+            json.dump(cookies, f)
+
+    def load(self):
+        if not os.path.exists(self.cookie_path):
+            print("=" * 50)
+            print("cookie file not exist")
+            print('=' * 50)
+        else:
+            with open(self.cookie_path, 'r') as f:
+                cookies = json.load(f)
+                self.session.cookies.update(cookies)
+
+    def download_one_file(self, remote_path: str, local_path: str = None):
+        url = "http://c.pcs.baidu.com/rest/2.0/pcs/file?method=download&app_id=250528&path={path}".format(
+            path=remote_path)
+        if local_path is None:
+            local_path = os.path.split(remote_path)[-1]
+        data = self.session.get(url, headers=base.user_agent_headers).content
+        if len(data) == 83 and data.startswith(b'{"error_code":31045,"error_msg":"user not exists","request_id":'):
+            print("老哥，如果不是你故意捣乱的话，那就是登陆失败了，要不试试手动登陆看看")
+        else:
+            with open(local_path, 'wb') as f:
+                f.write(data)
