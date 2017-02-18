@@ -1,5 +1,8 @@
+import json
 import random
 import time
+
+import exceptions
 
 
 # 从百度的JS里面看到的，用Python重新实现了一下
@@ -45,7 +48,22 @@ def get_logid():
     return result
 
 
-user_agent_headers = {
-    'Referer': "https://www.baidu.com/",
-    'User-Agent': "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:51.0) Gecko/20100101 Firefox/51.0",
-}
+def process_remote_error_message(error_text: str, remote_path: str):
+    try:
+        error_info = json.loads(error_text)
+    except json.JSONDecodeError:
+        raise exceptions.UnExceptedRemoteError(error_text)
+
+    try:
+        error_code = error_info['error_code']
+        error_message = error_info['error_msg']
+
+        if error_code == 31066:
+            raise exceptions.RemoteFileNotExistException(remote_path)
+        elif error_code == 31074:
+            raise exceptions.CanNotDownloadException
+        else:
+            raise exceptions.UnExceptedRemoteError(error_message)
+
+    except KeyError as e:
+        print("属性值'{key}'不存在".format(key=e.args[0]))
