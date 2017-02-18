@@ -6,10 +6,15 @@ import re
 import rsa
 import requests
 import exceptions
+import conf
 
 
 class LogInfo:
-    def __init__(self, user_name: str, password: str, cookie_path: str = "cookie_file", auto_save: bool = False,
+    def __init__(self,
+                 user_name: str,
+                 password: str,
+                 cookie_path: str,
+                 auto_save: bool = False,
                  auto_load: bool = False):
         self.session = requests.session()
         self.gid = base.build_gid()
@@ -47,7 +52,7 @@ class LogInfo:
         # 之前cookies名字都是从火狐浏览器里面直接复制的
         # “User-Agent”复制成了“User - Agent”
         # 于是一直没有返回BAIDUID……
-        headers = base.user_agent_headers
+        headers = conf.user_agent_headers
         self.session.get(url=url, headers=headers)
 
     def __get_api(self):
@@ -60,7 +65,7 @@ class LogInfo:
         self.token = token
 
     def __login_history(self):
-        headers = base.user_agent_headers
+        headers = conf.user_agent_headers
         url = "https://passport.baidu.com/v2/api/?loginhistory&token={token}&tpl=mn&apiver=v3&tt={tt}&gid={gid}&callback=bd__cbs__splnc1".format(
             token=self.token, tt=base.get_time_stamp(), gid=self.gid)
         self.session.get(url=url, headers=headers)
@@ -68,7 +73,7 @@ class LogInfo:
 
     def __login_check(self):
         # 有一个参数叫dv,但是不知道为什么没有这个参数也正常获得结果
-        headers = base.user_agent_headers
+        headers = conf.user_agent_headers
         url = "https://passport.baidu.com/v2/api/?logincheck&token={token}&tpl=mn&apiver=v3&tt={tt}&sub_source=leadsetpwd&username={username}&isphone={is_phone}&dv={dv}&callback=bd__cbs__sehp6m".format(
             tt=base.get_time_stamp(),
             is_phone=False,
@@ -91,7 +96,7 @@ class LogInfo:
         self.verify_code = verify_code
 
     def __get_public_key(self):
-        headers = base.user_agent_headers
+        headers = conf.user_agent_headers
         url = "https://passport.baidu.com/v2/getpublickey?token={token}&tpl=mn&apiver=v3&tt={tt}&gid={gid}&callback=bd__cbs__9t0drq".format(
             token=self.token, tt=base.get_time_stamp(), gid=self.gid)
         temp_text = self.session.get(url, headers=headers).text
@@ -134,12 +139,16 @@ class LogInfo:
             'dv': "",
             'callback': "parent.bd__pcbs__r6aj37"
         }
-        headers = base.user_agent_headers
+        headers = conf.user_agent_headers
         headers["Host"] = "passport.baidu.com"
         url = "https://passport.baidu.com/v2/api/?login"
         self.session.post(url, data=data, headers=headers)
 
     def save(self):
+        cookie_file_dir = os.path.split(self.cookie_path)[0]
+        if not os.path.exists(cookie_file_dir):
+            os.makedirs(cookie_file_dir)
+
         with open(self.cookie_path, 'w') as f:
             cookies = self.session.cookies.get_dict()
             json.dump(cookies, f)
@@ -159,14 +168,16 @@ class LogInfo:
 
     def has_logined(self):
         url = "http://pan.baidu.com/disk/home"
-        temp_req = self.session.get(url, headers=base.user_agent_headers)
-        result = False if temp_req.url == "http://pan.baidu.com/" else True
-        print(result)
+        temp_req = self.session.get(url, headers=conf.user_agent_headers)
+        if temp_req.url == "http://pan.baidu.com/":
+            return False
+        else:
+            return True
 
     def check_login(self):
         if not self.has_logined():
             raise exceptions.NotSignedException
 
     def __del__(self):
-        if self.auto_save:
+        if self.auto_save and self.has_logined():
             self.save()
