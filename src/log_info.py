@@ -1,12 +1,14 @@
-import os
-import json
 import base64
-import base
+import json
+import os
 import re
-import rsa
-import requests
+
+import base
 import exceptions
-from conf import default_conf
+import requests
+import rsa
+
+from src.conf import default_conf
 
 
 class LogInfo:
@@ -169,6 +171,7 @@ class LogInfo:
         if not self.__try_load():
             raise exceptions.CookieFileNotExistsException(self.cookie_path)
 
+    @property
     def has_logined(self):
         url = "http://pan.baidu.com/disk/home"
         temp_req = self.session.get(url, headers=default_conf.user_agent_headers)

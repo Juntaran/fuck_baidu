@@ -1,11 +1,13 @@
-import log_info
+import os
+import threading
+from queue import Queue, Empty
+
 import base
 import exceptions
+import log_info
 import requests
-import threading
-import os
-from conf import default_conf
-from queue import Queue, Empty
+
+from src.conf import default_conf
 
 
 class YunPan:

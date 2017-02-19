@@ -2,7 +2,7 @@ import json
 import random
 import time
 
-import exceptions
+from src import exceptions
 
 
 # 从百度的JS里面看到的，用Python重新实现了一下
