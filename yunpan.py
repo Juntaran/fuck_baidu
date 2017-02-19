@@ -1,13 +1,12 @@
 import log_info
 import base
 import exceptions
-import conf
 import requests
 import sqlite3
 import json
 import threading
-import shutil
 import os
+from conf import default_conf
 from queue import Queue, Empty
 
 
@@ -15,7 +14,7 @@ class YunPan:
     def __init__(self,
                  user_name: str,
                  password: str,
-                 cookie_path: str = conf.cookie_file_path,
+                 cookie_path: str = default_conf.cookie_file_path,
                  auto_save: bool = False,
                  auto_load: bool = False):
         self.log_info = log_info.LogInfo(
@@ -33,7 +32,7 @@ class YunPan:
         if remote_path.endswith("/"):
             raise exceptions.CanNotDownloadException
         if local_path is None:
-            local_path = remote_path.split("/")[-1]
+            local_path = os.path.join(default_conf.target_dir, remote_path.split("/")[-1])
 
         the_remote_file = RemoteFile(remote_path, local_path, self.session)
         print(the_remote_file.url)
@@ -42,7 +41,7 @@ class YunPan:
 
 class RemoteFile:
     def __init__(self, remote_path: str, local_path: str, session: requests.Session):
-        self.connection = sqlite3.connect(conf.download_info_database_file_path)
+        self.connection = sqlite3.connect(default_conf.download_info_database_file_path)
         self.session = session
         self.remote_path = remote_path
         self.local_path = local_path
@@ -53,26 +52,29 @@ class RemoteFile:
     def init(self):
         self.connection.execute(
             "CREATE TABLE IF NOT EXISTS {table_name}(remote_path TEXT PRIMARY KEY,etag TEXT NOT NULL,block_size INT NOT NULL,to_download TEXT NOT NULL,file_size INT NOT NULL );".format(
-                table_name=conf.download_info_table_name))
+                table_name=default_conf.download_info_table_name))
         self.connection.commit()
         url = "http://c.pcs.baidu.com/rest/2.0/pcs/file?method=download&app_id=250528&path={path}".format(
             path=self.remote_path)
-        headers = conf.user_agent_headers
-        response = self.session.head(url, headers=conf.user_agent_headers)
+        headers = default_conf.user_agent_headers
+        response = self.session.head(url, headers=default_conf.user_agent_headers)
         if response.status_code == 404:
             raise exceptions.RemoteFileNotExistException(self.remote_path)
         response_headers = response.headers
         self.file_size = int(response_headers["x-bs-file-size"])
         self.etag = response_headers["Etag"]
         self.remote_md5 = response_headers["Content-MD5"]
-        block_number = self.file_size // conf.download_block_size
-        if self.file_size % conf.download_block_size:
+        block_number = self.file_size // default_conf.download_block_size
+        if self.file_size % default_conf.download_block_size:
             block_number += 1
         self.to_download = [1, ] * block_number
         self.block_num = block_number
         self.temp_file_path = ".".join((self.local_path, self.remote_md5, "fktd"))
 
     def download(self):
+        target_dir = os.path.dirname(self.local_path)
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
         f = open(self.temp_file_path, 'wb')
         self.task_queue = Queue()
         self.buff = [0, ] * self.block_num
@@ -84,12 +86,12 @@ class RemoteFile:
             if i:
                 self.task_queue.put(index)
         finished_worker_number = 0
-        for i in range(conf.max_download_task_number):
+        for i in range(default_conf.max_download_task_number):
             threading.Thread(target=self.__download_worker).start()
-        while finished_worker_number < conf.max_download_task_number:
+        while finished_worker_number < default_conf.max_download_task_number:
             index, data = self.index_and_data_queue.get()
             if index != -1:
-                f.seek(index * conf.download_block_size)
+                f.seek(index * default_conf.download_block_size)
                 f.write(data)
                 f.flush()
                 self.buff[index] = data
@@ -110,12 +112,12 @@ class RemoteFile:
         self.index_and_data_queue.put((-1, None))
 
     def __download_one_block(self, block_index):
-        start = block_index * conf.download_block_size
-        end = (block_index + 1) * conf.download_block_size - 1
+        start = block_index * default_conf.download_block_size
+        end = (block_index + 1) * default_conf.download_block_size - 1
         # 坑爹BUG2
         # 开始没有用base.user_agent_headers的copy方法
         # 瞎几把引用，浅拷贝然后下文Range的时候相互影响出错了
-        headers = conf.user_agent_headers.copy()
+        headers = default_conf.user_agent_headers
         headers["Range"] = "bytes={start}-{end}".format(start=start,
                                                         end=end)
         temp_response = self.session.get(url=self.url, headers=headers)
@@ -131,14 +133,16 @@ class RemoteFile:
             result = self.connection.execute(
                 "SELECT {names} FROM {download_info_table_name} WHERE download_infos.remote_path=='{remote_path}'".format(
                     names=info_names,
-                    download_info_table_name=conf.download_info_table_name, remote_path=self.remote_path)).fetchone()
+                    download_info_table_name=default_conf.download_info_table_name,
+                    remote_path=self.remote_path)).fetchone()
         except sqlite3.OperationalError as e:
             result = None
         return result
 
     def save_info(self):
         sql_cmd = "REPLACE INTO download_infos(remote_path, etag, block_size, to_download,file_size)VALUES('{remote_path}','{etag}',{block_size},'{to_download}',{file_size})".format(
-            remote_path=self.remote_path, etag=self.etag, block_size=conf.download_block_size, file_size=self.file_size,
+            remote_path=self.remote_path, etag=self.etag, block_size=default_conf.download_block_size,
+            file_size=self.file_size,
             to_download=json.dumps(list(self.to_download)))
         self.connection.execute(sql_cmd)
         self.connection.commit()
