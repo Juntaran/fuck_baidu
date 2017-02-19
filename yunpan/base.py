@@ -2,7 +2,7 @@ import json
 import random
 import time
 
-from src import exceptions
+from yunpan import exceptions
 
 
 # 从百度的JS里面看到的，用Python重新实现了一下
@@ -51,10 +51,6 @@ def get_logid():
 def process_remote_error_message(error_text: str, remote_path: str):
     try:
         error_info = json.loads(error_text)
-    except json.JSONDecodeError:
-        raise exceptions.UnExceptedRemoteError(error_text)
-
-    try:
         error_code = error_info['error_code']
         error_message = error_info['error_msg']
 
@@ -63,7 +59,7 @@ def process_remote_error_message(error_text: str, remote_path: str):
         elif error_code == 31074:
             raise exceptions.CanNotDownloadException
         else:
-            raise exceptions.UnExceptedRemoteError(error_message)
+            raise exceptions.UnExceptedRemoteError(error_text)
 
-    except KeyError as e:
-        print("属性值'{key}'不存在".format(key=e.args[0]))
+    except (KeyError, json.JSONDecodeError) as e:
+        exceptions.UnExceptedRemoteError(error_text)

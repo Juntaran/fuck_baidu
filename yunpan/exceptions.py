@@ -8,13 +8,13 @@ class UnExceptedException(Exception):
         return "我也不知道是什么引起了这个错误"
 
 
-class CookieFileNotExistsException(Exception):
-    def __init__(self, cookie_file_path: str):
-        self.cookie_file_path = cookie_file_path
+class RecodeNotExistsException(Exception):
+    def __init__(self, recode_path: str):
+        self.recode_path = recode_path
 
     def __str__(self):
-        return "Cookie文件不存在，其路径应为{cookie_file_path}".format(
-            cookie_file_path=self.cookie_file_path)
+        return "记录文件不存在，其路径应为{recode_path}".format(
+            recode_path=self.recode_path)
 
 
 class CanNotDownloadException(Exception):
@@ -41,3 +41,7 @@ class UnExceptedRemoteError(Exception):
 class RemoteFileHasBeenModified(Exception):
     def __str__(self):
         return "远程文件已被修改，请重新下载"
+
+class DownloadFail(Exception):
+    def __str__(self):
+        return "下载未完成，请重试"

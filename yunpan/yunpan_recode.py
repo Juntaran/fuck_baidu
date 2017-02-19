@@ -1,32 +1,30 @@
-import base64
-import json
 import os
 import re
-
-import base
-import exceptions
-import requests
 import rsa
+import json
+import base64
+import requests
 
-from src.conf import default_conf
+from . import base, exceptions
+from .conf import default_conf
 
 
-class LogInfo:
+class LoginRecode:
     def __init__(self,
                  user_name: str,
                  password: str,
-                 cookie_path: str,
-                 auto_save: bool = False,
-                 auto_load: bool = False):
+                 recode_path: str,
+                 auto_save_recode: bool = False,
+                 auto_load_recode: bool = False):
         self.session = requests.session()
         self.gid = base.build_gid()
         self.user_name = user_name
         self.password = password
-        self.cookie_path = cookie_path
-        self.auto_load = auto_load
-        self.auto_save = auto_save
+        self.recode_path = recode_path
+        self.auto_load_recode = auto_load_recode
+        self.auto_save_recode = auto_save_recode
 
-        if self.auto_load:
+        if self.auto_load_recode:
             self.__try_load()
 
     def login(self):
@@ -54,7 +52,7 @@ class LogInfo:
         # 之前cookies名字都是从火狐浏览器里面直接复制的
         # “User-Agent”复制成了“User - Agent”
         # 于是一直没有返回BAIDUID……
-        headers = default_conf.user_agent_headers
+        headers = default_conf.base_headers
         self.session.get(url=url, headers=headers)
 
     def __get_api(self):
@@ -67,7 +65,7 @@ class LogInfo:
         self.token = token
 
     def __login_history(self):
-        headers = default_conf.user_agent_headers
+        headers = default_conf.base_headers
         url = "https://passport.baidu.com/v2/api/?loginhistory&token={token}&tpl=mn&apiver=v3&tt={tt}&gid={gid}&callback=bd__cbs__splnc1".format(
             token=self.token, tt=base.get_time_stamp(), gid=self.gid)
         self.session.get(url=url, headers=headers)
@@ -75,7 +73,7 @@ class LogInfo:
 
     def __login_check(self):
         # 有一个参数叫dv,但是不知道为什么没有这个参数也正常获得结果
-        headers = default_conf.user_agent_headers
+        headers = default_conf.base_headers
         url = "https://passport.baidu.com/v2/api/?logincheck&token={token}&tpl=mn&apiver=v3&tt={tt}&sub_source=leadsetpwd&username={username}&isphone={is_phone}&dv={dv}&callback=bd__cbs__sehp6m".format(
             tt=base.get_time_stamp(),
             is_phone=False,
@@ -98,7 +96,7 @@ class LogInfo:
         self.verify_code = verify_code
 
     def __get_public_key(self):
-        headers = default_conf.user_agent_headers
+        headers = default_conf.base_headers
         url = "https://passport.baidu.com/v2/getpublickey?token={token}&tpl=mn&apiver=v3&tt={tt}&gid={gid}&callback=bd__cbs__9t0drq".format(
             token=self.token, tt=base.get_time_stamp(), gid=self.gid)
         temp_text = self.session.get(url, headers=headers).text
@@ -141,25 +139,25 @@ class LogInfo:
             'dv': "",
             'callback': "parent.bd__pcbs__r6aj37"
         }
-        headers = default_conf.user_agent_headers
+        headers = default_conf.base_headers
         headers["Host"] = "passport.baidu.com"
         url = "https://passport.baidu.com/v2/api/?login"
         self.session.post(url, data=data, headers=headers)
 
     def save(self):
-        cookie_file_dir = os.path.split(self.cookie_path)[0]
-        if not os.path.exists(cookie_file_dir):
-            os.makedirs(cookie_file_dir)
+        recode_file_dir = os.path.split(self.recode_path)[0]
+        if not os.path.exists(recode_file_dir):
+            os.makedirs(recode_file_dir)
 
-        with open(self.cookie_path, 'w', encoding="utf-8") as f:
+        with open(self.recode_path, 'w', encoding="utf-8") as f:
             cookies = self.session.cookies.get_dict()
             json.dump(cookies, f)
 
     def __try_load(self):
-        if not os.path.exists(self.cookie_path):
+        if not os.path.exists(self.recode_path):
             return False
         else:
-            with open(self.cookie_path, 'r') as f:
+            with open(self.recode_path, 'r') as f:
                 try:
                     cookies = json.load(f)
                     self.session.cookies.update(cookies)
@@ -169,21 +167,20 @@ class LogInfo:
 
     def load(self):
         if not self.__try_load():
-            raise exceptions.CookieFileNotExistsException(self.cookie_path)
+            raise exceptions.RecodeNotExistsException(self.recode_path)
 
-    @property
     def has_logined(self):
         url = "http://pan.baidu.com/disk/home"
-        temp_req = self.session.get(url, headers=default_conf.user_agent_headers)
+        temp_req = self.session.get(url, headers=default_conf.base_headers)
         if temp_req.url == "http://pan.baidu.com/":
             return False
         else:
             return True
 
-    def check_login(self):
+    def assert_logined(self):
         if not self.has_logined():
             raise exceptions.NotSignedException
 
     def __del__(self):
-        if self.auto_save and self.has_logined():
+        if self.auto_save_recode and self.has_logined():
             self.save()
