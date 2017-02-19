@@ -6,7 +6,7 @@ import re
 import rsa
 import requests
 import exceptions
-import conf
+from conf import default_conf
 
 
 class LogInfo:
@@ -25,7 +25,7 @@ class LogInfo:
         self.auto_save = auto_save
 
         if self.auto_load:
-            self.load()
+            self.__try_load()
 
     def login(self):
         # 1.获取cookies:BAIDUID
@@ -52,7 +52,7 @@ class LogInfo:
         # 之前cookies名字都是从火狐浏览器里面直接复制的
         # “User-Agent”复制成了“User - Agent”
         # 于是一直没有返回BAIDUID……
-        headers = conf.user_agent_headers
+        headers = default_conf.user_agent_headers
         self.session.get(url=url, headers=headers)
 
     def __get_api(self):
@@ -65,7 +65,7 @@ class LogInfo:
         self.token = token
 
     def __login_history(self):
-        headers = conf.user_agent_headers
+        headers = default_conf.user_agent_headers
         url = "https://passport.baidu.com/v2/api/?loginhistory&token={token}&tpl=mn&apiver=v3&tt={tt}&gid={gid}&callback=bd__cbs__splnc1".format(
             token=self.token, tt=base.get_time_stamp(), gid=self.gid)
         self.session.get(url=url, headers=headers)
@@ -73,7 +73,7 @@ class LogInfo:
 
     def __login_check(self):
         # 有一个参数叫dv,但是不知道为什么没有这个参数也正常获得结果
-        headers = conf.user_agent_headers
+        headers = default_conf.user_agent_headers
         url = "https://passport.baidu.com/v2/api/?logincheck&token={token}&tpl=mn&apiver=v3&tt={tt}&sub_source=leadsetpwd&username={username}&isphone={is_phone}&dv={dv}&callback=bd__cbs__sehp6m".format(
             tt=base.get_time_stamp(),
             is_phone=False,
@@ -96,7 +96,7 @@ class LogInfo:
         self.verify_code = verify_code
 
     def __get_public_key(self):
-        headers = conf.user_agent_headers
+        headers = default_conf.user_agent_headers
         url = "https://passport.baidu.com/v2/getpublickey?token={token}&tpl=mn&apiver=v3&tt={tt}&gid={gid}&callback=bd__cbs__9t0drq".format(
             token=self.token, tt=base.get_time_stamp(), gid=self.gid)
         temp_text = self.session.get(url, headers=headers).text
@@ -139,7 +139,7 @@ class LogInfo:
             'dv': "",
             'callback': "parent.bd__pcbs__r6aj37"
         }
-        headers = conf.user_agent_headers
+        headers = default_conf.user_agent_headers
         headers["Host"] = "passport.baidu.com"
         url = "https://passport.baidu.com/v2/api/?login"
         self.session.post(url, data=data, headers=headers)
@@ -149,7 +149,7 @@ class LogInfo:
         if not os.path.exists(cookie_file_dir):
             os.makedirs(cookie_file_dir)
 
-        with open(self.cookie_path, 'w') as f:
+        with open(self.cookie_path, 'w', encoding="utf-8") as f:
             cookies = self.session.cookies.get_dict()
             json.dump(cookies, f)
 
@@ -158,17 +158,20 @@ class LogInfo:
             return False
         else:
             with open(self.cookie_path, 'r') as f:
-                cookies = json.load(f)
-                self.session.cookies.update(cookies)
+                try:
+                    cookies = json.load(f)
+                    self.session.cookies.update(cookies)
+                except json.JSONDecodeError:
+                    return False
             return True
 
     def load(self):
         if not self.__try_load():
-            raise exceptions.CookieFileNotExistsException(self.cookie_path())
+            raise exceptions.CookieFileNotExistsException(self.cookie_path)
 
     def has_logined(self):
         url = "http://pan.baidu.com/disk/home"
-        temp_req = self.session.get(url, headers=conf.user_agent_headers)
+        temp_req = self.session.get(url, headers=default_conf.user_agent_headers)
         if temp_req.url == "http://pan.baidu.com/":
             return False
         else:

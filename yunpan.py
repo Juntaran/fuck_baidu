@@ -2,8 +2,6 @@ import log_info
 import base
 import exceptions
 import requests
-import sqlite3
-import json
 import threading
 import os
 from conf import default_conf
@@ -27,6 +25,7 @@ class YunPan:
         self.session = self.log_info.session
 
     def download_one_file(self, remote_path: str, local_path: str = None):
+        self.log_info.check_login()
         if "/" not in remote_path:
             raise exceptions.RemoteFileNotExistException(remote_path)
         if remote_path.endswith("/"):
@@ -41,7 +40,6 @@ class YunPan:
 
 class RemoteFile:
     def __init__(self, remote_path: str, local_path: str, session: requests.Session):
-        self.connection = sqlite3.connect(default_conf.download_info_database_file_path)
         self.session = session
         self.remote_path = remote_path
         self.local_path = local_path
@@ -50,10 +48,6 @@ class RemoteFile:
         self.init()
 
     def init(self):
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS {table_name}(remote_path TEXT PRIMARY KEY,etag TEXT NOT NULL,block_size INT NOT NULL,to_download TEXT NOT NULL,file_size INT NOT NULL );".format(
-                table_name=default_conf.download_info_table_name))
-        self.connection.commit()
         url = "http://c.pcs.baidu.com/rest/2.0/pcs/file?method=download&app_id=250528&path={path}".format(
             path=self.remote_path)
         headers = default_conf.user_agent_headers
@@ -96,10 +90,11 @@ class RemoteFile:
                 f.flush()
                 self.buff[index] = data
                 self.to_download[index] = 0
-                self.save_info()
             else:
                 finished_worker_number += 1
         f.close()
+        if os.path.exists(self.local_path):
+            os.remove(self.local_path)
         os.rename(self.temp_file_path, self.local_path)
 
     def __download_worker(self):
@@ -125,29 +120,3 @@ class RemoteFile:
             self.index_and_data_queue.put((block_index, temp_response.content))
         else:
             base.process_remote_error_message(temp_response.text, self.remote_path)
-
-    def __read_info_from_database(self, info_names: tuple or str):
-        if not isinstance(info_names, str):
-            info_names = ",".join(info_names)
-        try:
-            result = self.connection.execute(
-                "SELECT {names} FROM {download_info_table_name} WHERE download_infos.remote_path=='{remote_path}'".format(
-                    names=info_names,
-                    download_info_table_name=default_conf.download_info_table_name,
-                    remote_path=self.remote_path)).fetchone()
-        except sqlite3.OperationalError as e:
-            result = None
-        return result
-
-    def save_info(self):
-        sql_cmd = "REPLACE INTO download_infos(remote_path, etag, block_size, to_download,file_size)VALUES('{remote_path}','{etag}',{block_size},'{to_download}',{file_size})".format(
-            remote_path=self.remote_path, etag=self.etag, block_size=default_conf.download_block_size,
-            file_size=self.file_size,
-            to_download=json.dumps(list(self.to_download)))
-        self.connection.execute(sql_cmd)
-        self.connection.commit()
-
-    def __del__(self):
-        if self.to_download:
-            self.save_info()
-        self.connection.close()
